@@ -5,14 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
-
-var jwtKey = []byte("97126c91-2838-45c1-a017-8e22dac15fd0")
 
 type Claims struct {
 	UserID string `json:"user_id"`
@@ -29,29 +29,46 @@ func (c *Config) Login(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&loginReq)
 	if err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request payload"})
+		LogError("login_request_decode", "Failed to decode login request", err)
 		return
 	}
 
-	id, passwd, err := c.repository.GetUserCredentials(loginReq.UserName)
+	// Validate request
+	var validate = validator.New()
+	err = validate.Struct(loginReq)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(formatValidationErrors(err))
+		return
+	}
+
+	passwd, err := c.repository.GetUserCredentials(loginReq.UserName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Invalid email or password", http.StatusUnauthorized)
+			LogError("login_user_not_found", "User not found", err)
 			return
 		}
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		LogError("login_db_error", "Failed to fetch user credentials", err)
 		return
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passwd), []byte(loginReq.Password))
 	if err != nil {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
+		LogError("login_invalid_password", "Invalid password provided", err)
 		return
 	}
 
-	authToken, err := GenerateJWT(id)
+	authToken, err := c.GenerateJWT(loginReq.UserName)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		LogError("login_jwt_generation", "Failed to generate JWT token", err)
 		return
 	}
 
@@ -63,9 +80,11 @@ func (c *Config) Login(w http.ResponseWriter, r *http.Request) {
 		Message: "Login successful",
 	})
 
+	LogSuccess("login_success", fmt.Sprintf("User %s logged in successfully", loginReq.UserName))
+
 }
 
-func GenerateJWT(userID string) (string, error) {
+func (c *Config) GenerateJWT(userID string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
 
 	claims := &Claims{
@@ -78,7 +97,7 @@ func GenerateJWT(userID string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := token.SignedString(c.jwtKey)
 	if err != nil {
 		return "", err
 	}

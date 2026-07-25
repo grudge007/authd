@@ -45,15 +45,26 @@ func (d *Repository) InsertUser(newUser model.USER) error {
 	return nil
 }
 
-func (d *Repository) GetUserCredentials(username string) (string, string, error) {
-	var id, passwd string
+func (d *Repository) GetUserCredentials(username string) (string, error) {
+	var passwd string
 
-	query := `SELECT id, password_hash FROM users WHERE username = ?`
+	query := `SELECT password_hash FROM users WHERE username = ?`
 
-	err := d.DB.QueryRow(query, username).Scan(&id, &passwd)
+	err := d.DB.QueryRow(query, username).Scan(&passwd)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 
-	return id, passwd, nil
+	return passwd, nil
+}
+
+func (d *Repository) UpdatePassword(username, password string) error {
+	query := "UPDATE users SET password_hash = ? WHERE username = ?"
+
+	_, err := d.DB.Exec(query, password, username)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

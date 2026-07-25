@@ -18,12 +18,14 @@ import (
 type Config struct {
 	repository *repository.Repository
 	db         *sql.DB
+	jwtKey     []byte
 }
 
-func New(repo repository.Repository) *Config {
+func New(repo repository.Repository, jwtKey string) *Config {
 	return &Config{
 		repository: &repo,
 		db:         repo.DB,
+		jwtKey:     []byte(jwtKey),
 	}
 }
 
@@ -46,10 +48,10 @@ func (c *Config) Register(w http.ResponseWriter, r *http.Request) {
 	var validate = validator.New()
 	err = validate.Struct(newUser)
 	if err != nil {
-		for _, err := range err.(validator.ValidationErrors) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(formatValidationErrors(err))
+		return
 	}
 
 	// 4. Hash password
@@ -70,18 +72,20 @@ func (c *Config) Register(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusConflict)
 
 				if strings.Contains(mysqlErr.Message, "username") {
+					LogError("register_username_taken", "Username is already taken", nil)
 					json.NewEncoder(w).Encode(map[string]string{"error": "Username is already taken"})
 					return
 				}
 
 				if strings.Contains(mysqlErr.Message, "email") {
+					LogError("register_email_taken", "Email is already taken", nil)
 					json.NewEncoder(w).Encode(map[string]string{"error": "email is already taken"})
 				}
 				return
 			}
 
 			http.Error(w, "Failed to register user", http.StatusInternalServerError)
-			fmt.Println(err)
+			LogError("register_db_error", "Failed to insert user into database", err)
 			return
 		}
 	}
@@ -92,6 +96,8 @@ func (c *Config) Register(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "User created successfully",
 	})
+
+	LogSuccess("register_success", fmt.Sprintf("User %s registered successfully", newUser.UserName))
 }
 
 func Hash(password string) (string, error) {

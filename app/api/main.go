@@ -5,10 +5,16 @@ import (
 	"authd/internal/repository"
 	"log"
 	"net/http"
+	"os"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	dsn := "app-admin:passwd@tcp(127.0.0.1:3306)/authd?parseTime=true"
+
+	err := godotenv.Load()
+	jwtKey := os.Getenv("JWT_KEY")
+	dsn := os.Getenv("DSN")
 
 	repo, err := repository.InitDB(dsn)
 	if err != nil {
@@ -17,13 +23,16 @@ func main() {
 
 	defer repo.DB.Close()
 
-	authHandler := auth.New(*repo)
+	authHandler := auth.New(*repo, jwtKey)
 
 	// Register
 	http.HandleFunc("/api/v1/authd/register", authHandler.Register)
 
 	// Login
 	http.HandleFunc("/api/v1/authd/login", authHandler.Login)
+
+	// Change Password
+	http.HandleFunc("/api/v1/authd/user/update", authHandler.Update)
 
 	log.Println("Server running on http://localhost:7070...")
 	err = http.ListenAndServe(":7070", nil)
