@@ -33,7 +33,7 @@ func (c *Config) Refresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(formatValidationErrors(err))
+		json.NewEncoder(w).Encode(FormatValidationErrors(err))
 		return
 	}
 

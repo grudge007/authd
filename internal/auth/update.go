@@ -22,30 +22,9 @@ func (c *Config) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, bearer) {
-		http.Error(w, "Missing bearer token", http.StatusUnauthorized)
-		return
-	}
-
-	tokenString := strings.TrimPrefix(authHeader, bearer)
-
-	token, err := jwt.ParseWithClaims(tokenString,
-		&Claims{},
-		func(t *jwt.Token) (any, error) {
-			return c.jwtKey, nil
-		},
-	)
-
-	if err != nil || token == nil || !token.Valid {
-		http.Error(w, "Invalid token", http.StatusUnauthorized)
-		LogError("update_invalid_token", "Invalid or expired JWT token", err)
-		return
-	}
-
-	claims, ok := token.Claims.(*Claims)
-	if !ok {
-		http.Error(w, "Invalid token claims", http.StatusUnauthorized)
+	claims, err := ValidateAuth(r.Header, string(c.jwtKey))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -65,7 +44,7 @@ func (c *Config) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(formatValidationErrors(err))
+		json.NewEncoder(w).Encode(FormatValidationErrors(err))
 		return
 	}
 
@@ -109,4 +88,33 @@ func (c *Config) Update(w http.ResponseWriter, r *http.Request) {
 
 	LogSuccess("update_password_success", fmt.Sprintf("Password updated for user %s", claims.UserID))
 
+}
+
+func ValidateAuth(header http.Header, jwtKey string) (*Claims, error) {
+	authHeader := header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, bearer) {
+		return nil, fmt.Errorf("Missing bearer token")
+	}
+
+	tokenString := strings.TrimPrefix(authHeader, bearer)
+
+	token, err := jwt.ParseWithClaims(tokenString,
+		&Claims{},
+		func(t *jwt.Token) (interface{}, error) {
+			// Ensure the key type matches what was used for signing ([]byte)
+			return []byte(jwtKey), nil
+		},
+	)
+
+	if err != nil || token == nil || !token.Valid {
+		LogError("validate_auth_invalid_token", "Invalid or expired JWT token", err)
+		return nil, fmt.Errorf("Invalid token")
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok {
+		return nil, fmt.Errorf("Invalid token")
+	}
+
+	return claims, nil
 }

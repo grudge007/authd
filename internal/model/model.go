@@ -25,3 +25,13 @@ type ChangePassword struct {
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
+
+type CreateProject struct {
+	ProjectName string `json:"project_name" validate:"required,min=3,max=20"`
+	ProjectDecs string `json:"project_desc" validate:"min=3,max=30"`
+}
+
+type AddMembers struct {
+	ProjectName string   `json:"project_name"`
+	Members     []string `json:"members"`
+}

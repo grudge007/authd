@@ -42,7 +42,7 @@ func (c *Config) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(formatValidationErrors(err))
+		json.NewEncoder(w).Encode(FormatValidationErrors(err))
 		return
 	}
 
@@ -93,7 +93,7 @@ func (c *Config) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Config) GenerateJWT(userID string) (string, error) {
-	expirationTime := time.Now().Add(15 * time.Minute)
+	expirationTime := time.Now().Add(150 * time.Minute)
 
 	claims := &Claims{
 		UserID: userID,
