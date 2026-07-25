@@ -34,6 +34,9 @@ func main() {
 	// Change Password
 	http.HandleFunc("/api/v1/authd/user/update", authHandler.Update)
 
+	// Refresh Token
+	http.HandleFunc("/api/v1/authd/refresh", authHandler.Refresh)
+
 	log.Println("Server running on http://localhost:7070...")
 	err = http.ListenAndServe(":7070", nil)
 	if err != nil {

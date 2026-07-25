@@ -72,12 +72,20 @@ func (c *Config) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	refreshToken, err := c.GenerateRefreshToken(loginReq.UserName)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		LogError("login_refresh_token_generation", "Failed to generate refresh token", err)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
 	json.NewEncoder(w).Encode(model.LoginResponse{
-		Token:   authToken,
-		Message: "Login successful",
+		Token:        authToken,
+		RefreshToken: refreshToken,
+		Message:      "Login successful",
 	})
 
 	LogSuccess("login_success", fmt.Sprintf("User %s logged in successfully", loginReq.UserName))
@@ -85,7 +93,28 @@ func (c *Config) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Config) GenerateJWT(userID string) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
+	expirationTime := time.Now().Add(15 * time.Minute)
+
+	claims := &Claims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	tokenString, err := token.SignedString(c.jwtKey)
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+
+func (c *Config) GenerateRefreshToken(userID string) (string, error) {
+	expirationTime := time.Now().Add(7 * 24 * time.Hour)
 
 	claims := &Claims{
 		UserID: userID,
